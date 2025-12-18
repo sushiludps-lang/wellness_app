@@ -830,17 +830,17 @@ def dashboard(person, enable_gerd=True, enable_t1d=False, enable_period=False):
         )
 
     st.subheader("Dashboard")
-    c1, c2, c3, c4 = st.columns(4)
+c1, c2, c3, c4 = st.columns(4)
 
-    last_wellness = float(merged["WellnessIndex"].iloc[-1]) if (not merged.empty and "WellnessIndex" in merged.columns) else 0.0
-    last_protein = float(merged["protein_g"].iloc[-1]) if (not merged.empty and "protein_g" in merged.columns) else 0.0
-    last_kcal = float(merged["kcal"].iloc[-1]) if (not merged.empty and "kcal" in merged.columns) else 0.0
+last_wellness = float(merged["WellnessIndex"].iloc[-1]) if (not merged.empty and "WellnessIndex" in merged.columns) else 0.0
+last_protein = float(merged["protein_g"].iloc[-1]) if (not merged.empty and "protein_g" in merged.columns) else 0.0
+last_kcal = float(merged["kcal"].iloc[-1]) if (not merged.empty and "kcal" in merged.columns) else 0.0
 
-    last_weight = np.nan
-    if not merged.empty and "weight_kg" in merged.columns and merged["weight_kg"].notna().any():
-        last_weight = float(merged["weight_kg"].dropna().iloc[-1])
+last_weight = np.nan
+if not merged.empty and "weight_kg" in merged.columns and merged["weight_kg"].notna().any():
+    last_weight = float(merged["weight_kg"].dropna().iloc[-1])
 
-    with c1:
+with c1:
     st.metric("Wellness (0–100)", f"{last_wellness:.1f}")
 with c2:
     st.metric("Calories (latest day)", f"{last_kcal:.0f}")
@@ -859,6 +859,7 @@ render_graphs(
     enable_t1d=enable_t1d,
     enable_period=enable_period
 )
+
 
 
 
