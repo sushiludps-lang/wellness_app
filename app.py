@@ -861,8 +861,6 @@ render_graphs(
 )
 
 gcols = st.columns([1.2, 1.0])
-
-
     with gcols[0]:
         if not merged.empty and "WellnessIndex" in merged.columns:
             fig = nice_line(merged, "log_date", "WellnessIndex", "Wellness trend", ytitle="Wellness (0–100)")
