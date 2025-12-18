@@ -785,82 +785,66 @@ def render_graphs(df, person, enable_gerd=False, enable_t1d=False, enable_period
         fig.update_layout(height=260, margin=dict(l=10, r=10, t=40, b=10))
         st.plotly_chart(fig, use_container_width=True)
 
-def dashboard(person, enable_gerd=True, enable_t1d=False, enable_period=False):
-    logs = load_logs(person, days=90)
-    daily = load_daily(person, days=180)
-
-    if not logs.empty:
-        logs2 = logs.copy()
-        logs2["log_date"] = pd.to_datetime(logs2["log_date"])
-        daily_food = logs2.groupby("log_date")[["kcal","protein_g","carbs_g","fat_g","gerd"]].sum().reset_index()
-        daily_food["log_date"] = daily_food["log_date"].dt.date.astype(str)
-    else:
-        daily_food = pd.DataFrame(columns=["log_date","kcal","protein_g","carbs_g","fat_g","gerd"])
-
-    if not daily.empty:
-        merged = daily.merge(daily_food, how="left", on="log_date")
-        for col in ["kcal","protein_g","carbs_g","fat_g","gerd"]:
-            if col in merged.columns:
-                merged[col] = merged[col].fillna(0.0)
-    else:
-        merged = daily_food.copy()
-        if not merged.empty:
-            merged["weight_kg"] = np.nan
-            merged["sleep_hours"] = np.nan
-            merged["exercise_min"] = np.nan
-            merged["stress"] = np.nan
-            merged["mood"] = np.nan
-            merged["gerd_symptom"] = np.nan
-            merged["glucose_mgdl"] = np.nan
-            merged["insulin_units"] = np.nan
-            merged["period_day"] = np.nan
-            merged["period_flow"] = ""
-            merged["period_symptoms"] = ""
-
-    if not merged.empty:
-        merged["WellnessIndex"] = merged.apply(
-            lambda r: wellness_index_generic(
-                kcal=float(r.get("kcal", 0.0)),
-                protein_g=float(r.get("protein_g", 0.0)),
-                sleep_h=float(r.get("sleep_hours", 7.0)) if pd.notna(r.get("sleep_hours", np.nan)) else 7.0,
-                exercise_min=float(r.get("exercise_min", 0.0)) if pd.notna(r.get("exercise_min", np.nan)) else 0.0,
-                stress_0_10=float(r.get("stress", 4.0)) if pd.notna(r.get("stress", np.nan)) else 4.0,
-            ),
-            axis=1
-        )
-
-    st.subheader("Dashboard")
-c1, c2, c3, c4 = st.columns(4)
-
-last_wellness = float(merged["WellnessIndex"].iloc[-1]) if (not merged.empty and "WellnessIndex" in merged.columns) else 0.0
-last_protein = float(merged["protein_g"].iloc[-1]) if (not merged.empty and "protein_g" in merged.columns) else 0.0
-last_kcal = float(merged["kcal"].iloc[-1]) if (not merged.empty and "kcal" in merged.columns) else 0.0
-
-last_weight = np.nan
-if not merged.empty and "weight_kg" in merged.columns and merged["weight_kg"].notna().any():
-    last_weight = float(merged["weight_kg"].dropna().iloc[-1])
-
-with c1:
-    st.metric("Wellness (0–100)", f"{last_wellness:.1f}")
-with c2:
-    st.metric("Calories (latest day)", f"{last_kcal:.0f}")
-with c3:
-    st.metric("Protein (latest day)", f"{last_protein:.1f} g")
-with c4:
-    st.metric("Weight (latest)", "—" if np.isnan(last_weight) else f"{last_weight:.1f} kg")
-
-st.markdown("---")
-st.subheader("Trends & Progress")
-
-render_graphs(
-    merged,
-    person,
-    enable_gerd=enable_gerd,
-    enable_t1d=enable_t1d,
-    enable_period=enable_period
-)
     # ---- Trend charts ----
     gcols = st.columns([1.2, 1.0])
+
+    with gcols[0]:
+        if not merged.empty and "WellnessIndex" in merged.columns:
+            fig = nice_line(
+                merged,
+                "log_date",
+                "WellnessIndex",
+                "Wellness trend",
+                ytitle="Wellness (0–100)"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No data yet. Add meals + daily check-ins to see trends.")
+
+    with gcols[1]:
+        if not logs.empty:
+            fig2 = nice_area_macros(logs, title="Macros per day (g)")
+            st.plotly_chart(fig2, use_container_width=True)
+        else:
+            st.info("Log meals to see macro trends.")
+
+    pcols = st.columns([1, 1])
+
+    with pcols[0]:
+        if not merged.empty and "weight_kg" in merged.columns and merged["weight_kg"].notna().any():
+            figw = nice_line(
+                merged[merged["weight_kg"].notna()],
+                "log_date",
+                "weight_kg",
+                "Weight trend",
+                ytitle="kg"
+            )
+            st.plotly_chart(figw, use_container_width=True)
+        else:
+            st.caption("Weight plot appears after you log weight in Daily check-in.")
+
+    with pcols[1]:
+        if enable_gerd and "gerd_symptom" in merged.columns and merged["gerd_symptom"].notna().any():
+            figg = nice_line(
+                merged[merged["gerd_symptom"].notna()],
+                "log_date",
+                "gerd_symptom",
+                "GERD symptoms trend",
+                ytitle="0–10"
+            )
+            st.plotly_chart(figg, use_container_width=True)
+        elif enable_t1d and "glucose_mgdl" in merged.columns and merged["glucose_mgdl"].notna().any():
+            figglu = nice_line(
+                merged[merged["glucose_mgdl"].notna()],
+                "log_date",
+                "glucose_mgdl",
+                "Glucose trend",
+                ytitle="mg/dL"
+            )
+            st.plotly_chart(figglu, use_container_width=True)
+        else:
+            st.caption("This panel becomes GERD or Glucose once logged.")
+
 
     with gcols[0]:
         if not merged.empty and "WellnessIndex" in merged.columns:
