@@ -13,6 +13,7 @@ import sqlite3
 from datetime import datetime, date, timedelta
 
 import numpy as np
+import plotly.express as px
 import pandas as pd
 import streamlit as st
 import plotly.express as px
@@ -699,6 +700,120 @@ def goal_panel(person, goal_type, default_start, default_target, days_default, l
       </div>
     </div>
     """, unsafe_allow_html=True)
+def render_graphs(df, person, enable_gerd=False, enable_t1d=False, enable_period=False):
+    """
+    df = logs dataframe loaded for this person (history).
+    Expected useful columns if present:
+      log_date (date or str), meal_time (str), wellness_index, weight_kg,
+      calories_kcal, protein_g, carbs_g, fat_g,
+      gerd_stress, exercise_minutes, sleep_hours,
+      insulin_units, glucose_mgdl,
+      period_day (0/1) or period_note
+    This function is defensive: it will plot whatever columns exist.
+    """
+    if df is None or len(df) == 0:
+        st.info("No history yet. Save a few days to see graphs.")
+        return
+
+    dfx = df.copy()
+
+    # Normalize date
+    if "log_date" in dfx.columns:
+        dfx["log_date"] = pd.to_datetime(dfx["log_date"]).dt.date
+    else:
+        st.warning("History has no 'log_date' column, so graphs cannot be drawn.")
+        return
+
+    # Sort + daily aggregates
+    dfx = dfx.sort_values(["log_date"] + (["meal_time"] if "meal_time" in dfx.columns else []))
+    daily = dfx.groupby("log_date", as_index=False).agg({
+        **({"wellness_index": "mean"} if "wellness_index" in dfx.columns else {}),
+        **({"weight_kg": "mean"} if "weight_kg" in dfx.columns else {}),
+        **({"calories_kcal": "sum"} if "calories_kcal" in dfx.columns else {}),
+        **({"protein_g": "sum"} if "protein_g" in dfx.columns else {}),
+        **({"carbs_g": "sum"} if "carbs_g" in dfx.columns else {}),
+        **({"fat_g": "sum"} if "fat_g" in dfx.columns else {}),
+        **({"exercise_minutes": "sum"} if "exercise_minutes" in dfx.columns else {}),
+        **({"sleep_hours": "mean"} if "sleep_hours" in dfx.columns else {}),
+        **({"gerd_stress": "mean"} if "gerd_stress" in dfx.columns else {}),
+        **({"insulin_units": "sum"} if "insulin_units" in dfx.columns else {}),
+        **({"glucose_mgdl": "mean"} if "glucose_mgdl" in dfx.columns else {}),
+        **({"period_day": "max"} if "period_day" in dfx.columns else {}),
+    })
+
+    st.subheader("Trends & Graphs")
+
+    # --- Row 1: Wellness + Weight ---
+    c1, c2 = st.columns(2)
+
+    if "wellness_index" in daily.columns:
+        fig = px.line(
+            daily, x="log_date", y="wellness_index",
+            markers=True, title=f"{person}: Wellness Index over time"
+        )
+        fig.update_layout(height=320, margin=dict(l=10, r=10, t=40, b=10))
+        fig.update_traces(line=dict(width=3))
+        c1.plotly_chart(fig, use_container_width=True)
+
+    if "weight_kg" in daily.columns:
+        fig = px.line(
+            daily, x="log_date", y="weight_kg",
+            markers=True, title=f"{person}: Weight trend (kg)"
+        )
+        fig.update_layout(height=320, margin=dict(l=10, r=10, t=40, b=10))
+        fig.update_traces(line=dict(width=3))
+        c2.plotly_chart(fig, use_container_width=True)
+
+    # --- Row 2: Macros / Calories ---
+    has_macros = any(col in daily.columns for col in ["calories_kcal", "protein_g", "carbs_g", "fat_g"])
+    if has_macros:
+        st.markdown("#### Nutrition totals (per day)")
+        macro_cols = [c for c in ["calories_kcal", "protein_g", "carbs_g", "fat_g"] if c in daily.columns]
+        melt = daily.melt(id_vars=["log_date"], value_vars=macro_cols, var_name="metric", value_name="value")
+        fig = px.bar(melt, x="log_date", y="value", color="metric", barmode="group", title="Daily totals")
+        fig.update_layout(height=360, margin=dict(l=10, r=10, t=40, b=10))
+        st.plotly_chart(fig, use_container_width=True)
+
+    # --- Row 3: Sleep / Exercise / Stress (if present) ---
+    cols = st.columns(3)
+
+    if "sleep_hours" in daily.columns:
+        fig = px.line(daily, x="log_date", y="sleep_hours", markers=True, title="Sleep (hours)")
+        fig.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10))
+        fig.update_traces(line=dict(width=3))
+        cols[0].plotly_chart(fig, use_container_width=True)
+
+    if "exercise_minutes" in daily.columns:
+        fig = px.bar(daily, x="log_date", y="exercise_minutes", title="Exercise (minutes/day)")
+        fig.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10))
+        cols[1].plotly_chart(fig, use_container_width=True)
+
+    if enable_gerd and "gerd_stress" in daily.columns:
+        fig = px.line(daily, x="log_date", y="gerd_stress", markers=True, title="GERD / reflux stress (avg)")
+        fig.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10))
+        fig.update_traces(line=dict(width=3))
+        cols[2].plotly_chart(fig, use_container_width=True)
+
+    # --- T1D graphs (if enabled/columns exist) ---
+    if enable_t1d:
+        st.markdown("#### Type 1 Diabetes trends")
+        tcols = st.columns(2)
+        if "glucose_mgdl" in daily.columns:
+            fig = px.line(daily, x="log_date", y="glucose_mgdl", markers=True, title="Avg glucose (mg/dL)")
+            fig.update_layout(height=320, margin=dict(l=10, r=10, t=40, b=10))
+            fig.update_traces(line=dict(width=3))
+            tcols[0].plotly_chart(fig, use_container_width=True)
+        if "insulin_units" in daily.columns:
+            fig = px.bar(daily, x="log_date", y="insulin_units", title="Total insulin (units/day)")
+            fig.update_layout(height=320, margin=dict(l=10, r=10, t=40, b=10))
+            tcols[1].plotly_chart(fig, use_container_width=True)
+
+    # --- Period marker (if enabled/column exists) ---
+    if enable_period and "period_day" in daily.columns:
+        st.markdown("#### Period tracker (logged days)")
+        fig = px.scatter(daily, x="log_date", y="period_day", title="Period logged (1 = yes)")
+        fig.update_layout(height=260, margin=dict(l=10, r=10, t=40, b=10))
+        st.plotly_chart(fig, use_container_width=True)
 
 def dashboard(person, enable_gerd=True, enable_t1d=False, enable_period=False):
     logs = load_logs(person, days=90)
@@ -763,6 +878,16 @@ def dashboard(person, enable_gerd=True, enable_t1d=False, enable_period=False):
         st.metric("Protein (latest day)", f"{last_protein:.1f} g")
     with c4:
         st.metric("Weight (latest)", "—" if np.isnan(last_weight) else f"{last_weight:.1f} kg")
+          st.markdown("---")
+    st.subheader("Trends & Progress")
+
+    render_graphs(
+        merged,
+        person,
+        enable_gerd=enable_gerd,
+        enable_t1d=enable_t1d,
+        enable_period=enable_period
+    )
 
     gcols = st.columns([1.2, 1.0])
 
