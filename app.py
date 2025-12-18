@@ -7,16 +7,17 @@
 # - DB migration included (avoids missing "person" column)
 # - Fixes StreamlitDuplicateElementKey by adding a unique `context_key`
 #   so the same logger can be used in multiple tabs safely.
+# - FIXED all indentation errors + removed duplicate/invalid blocks
 
 import os
 import sqlite3
 from datetime import datetime, date, timedelta
 
-import plotly.express as px
-import plotly.graph_objects as go
+import numpy as np
 import pandas as pd
 import streamlit as st
-
+import plotly.express as px
+import plotly.graph_objects as go
 
 
 # =========================
@@ -56,6 +57,7 @@ section[data-testid="stSidebar"] .block-container {padding-top: 1rem;}
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
+
 # =========================
 # 1) DATABASE (single-file)
 # =========================
@@ -64,6 +66,7 @@ def db():
     conn.execute("PRAGMA journal_mode=WAL;")
     return conn
 
+
 def init_db():
     """
     Creates the latest schema AND migrates older schemas in place.
@@ -71,7 +74,6 @@ def init_db():
     """
     conn = db()
 
-    # Create latest schema
     conn.execute("""
     CREATE TABLE IF NOT EXISTS logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,7 +133,7 @@ def init_db():
         if col not in cols:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {coldef_sql}")
 
-    # logs: older DB might miss person/notes/etc
+    # logs
     ensure_column("logs", "person", "TEXT NOT NULL DEFAULT 'Sushil'")
     ensure_column("logs", "log_date", "TEXT")
     ensure_column("logs", "meal_type", "TEXT")
@@ -145,7 +147,7 @@ def init_db():
     ensure_column("logs", "gerd", "REAL")
     ensure_column("logs", "notes", "TEXT")
 
-    # daily: older DB might miss person and newer fields
+    # daily
     ensure_column("daily", "person", "TEXT NOT NULL DEFAULT 'Sushil'")
     ensure_column("daily", "log_date", "TEXT")
     ensure_column("daily", "weight_kg", "REAL")
@@ -164,13 +166,15 @@ def init_db():
     conn.commit()
     conn.close()
 
+
 init_db()
+
 
 def upsert_daily(person, log_date, **kwargs):
     conn = db()
     cols = [
-        "weight_kg","sleep_hours","exercise_min","mood","stress","gerd_symptom","glucose_mgdl",
-        "period_day","period_flow","period_symptoms","insulin_units","extra_notes"
+        "weight_kg", "sleep_hours", "exercise_min", "mood", "stress", "gerd_symptom", "glucose_mgdl",
+        "period_day", "period_flow", "period_symptoms", "insulin_units", "extra_notes"
     ]
     data = {c: kwargs.get(c, None) for c in cols}
 
@@ -196,6 +200,7 @@ def upsert_daily(person, log_date, **kwargs):
     conn.commit()
     conn.close()
 
+
 def add_meal_log(person, log_date, meal_type, meal_time, dish, grams, macros, notes=""):
     conn = db()
     conn.execute("""
@@ -212,7 +217,8 @@ def add_meal_log(person, log_date, meal_type, meal_time, dish, grams, macros, no
     conn.commit()
     conn.close()
 
-def load_logs(person, days=60):
+
+def load_logs(person, days=90):
     conn = db()
     since = (date.today() - timedelta(days=days)).isoformat()
     df = pd.read_sql_query("""
@@ -223,7 +229,8 @@ def load_logs(person, days=60):
     conn.close()
     return df
 
-def load_daily(person, days=90):
+
+def load_daily(person, days=180):
     conn = db()
     since = (date.today() - timedelta(days=days)).isoformat()
     df = pd.read_sql_query("""
@@ -234,21 +241,26 @@ def load_daily(person, days=90):
     conn.close()
     return df
 
+
 def set_goal(person, goal_type, start_weight, target_weight, target_date, kcal_adjust, protein_target):
     conn = db()
     conn.execute("""
         INSERT INTO goals(person, goal_type, start_date, start_weight, target_weight, target_date, kcal_adjust, protein_target)
         VALUES(?,?,?,?,?,?,?,?)
         ON CONFLICT(person, goal_type)
-        DO UPDATE SET start_date=excluded.start_date, start_weight=excluded.start_weight,
-                      target_weight=excluded.target_weight, target_date=excluded.target_date,
-                      kcal_adjust=excluded.kcal_adjust, protein_target=excluded.protein_target
+        DO UPDATE SET start_date=excluded.start_date,
+                      start_weight=excluded.start_weight,
+                      target_weight=excluded.target_weight,
+                      target_date=excluded.target_date,
+                      kcal_adjust=excluded.kcal_adjust,
+                      protein_target=excluded.protein_target
     """, (
         person, goal_type, date.today().isoformat(), float(start_weight), float(target_weight),
         target_date, float(kcal_adjust), float(protein_target)
     ))
     conn.commit()
     conn.close()
+
 
 def get_goal(person, goal_type):
     conn = db()
@@ -267,6 +279,7 @@ def get_goal(person, goal_type):
         "kcal_adjust": row[4],
         "protein_target": row[5],
     }
+
 
 # =========================
 # 2) FOOD + DISH DATABASE
@@ -302,8 +315,8 @@ ING_DB = {
     "paneer":            {"protein": 18.0, "carbs": 2.0,  "fat": 20.0, "kcal": 265, "gerd": 0.10},
     "tofu":              {"protein": 8.0,  "carbs": 2.0,  "fat": 5.0,  "kcal": 80,  "gerd": 0.03},
 
-    "oil":               {"protein": 0.0,  "carbs": 0.0,  "fat": 100.0,"kcal": 900, "gerd": 0.20},
-    "ghee":              {"protein": 0.0,  "carbs": 0.0,  "fat": 100.0,"kcal": 900, "gerd": 0.22},
+    "oil":               {"protein": 0.0,  "carbs": 0.0,  "fat": 100.0, "kcal": 900, "gerd": 0.20},
+    "ghee":              {"protein": 0.0,  "carbs": 0.0,  "fat": 100.0, "kcal": 900, "gerd": 0.22},
 
     "veg_curry":         {"protein": 2.0,  "carbs": 8.0,  "fat": 4.0,  "kcal": 80,  "gerd": 0.10},
     "bhaji":             {"protein": 2.5,  "carbs": 10.0, "fat": 6.0,  "kcal": 105, "gerd": 0.12},
@@ -382,35 +395,34 @@ DISH_RECIPES = {
 
 DISH_CATEGORIES = {
     "Breakfast": [
-        "omelette","boiled_eggs_2","oats_bowl","poha","upma","idli_sambar","dosa_sambar","protein_shake","banana_milk_shake"
+        "omelette", "boiled_eggs_2", "oats_bowl", "poha", "upma", "idli_sambar", "dosa_sambar", "protein_shake", "banana_milk_shake"
     ],
     "Lunch": [
-        "dal_rice","rajma_rice","chole_rice","roti_veg_curry","roti_dal","egg_curry",
-        "chicken_curry_rice","biryani_chicken","paneer_curry_roti","tofu_curry_roti"
+        "dal_rice", "rajma_rice", "chole_rice", "roti_veg_curry", "roti_dal", "egg_curry",
+        "chicken_curry_rice", "biryani_chicken", "paneer_curry_roti", "tofu_curry_roti"
     ],
     "Dinner": [
-        "dal_rice","roti_veg_curry","roti_dal","egg_curry","chicken_curry_rice",
-        "paneer_curry_roti","tofu_curry_roti","paratha_curd","thepla_curd"
+        "dal_rice", "roti_veg_curry", "roti_dal", "egg_curry", "chicken_curry_rice",
+        "paneer_curry_roti", "tofu_curry_roti", "paratha_curd", "thepla_curd"
     ],
     "Snacks": [
-        "dhokla_plate","khandvi_plate","handvo_slice","khakhra_snack","sev_snack","fafda",
-        "pav_bhaji","vada_pav","samosa","pizza","burger","fries","curd_bowl"
+        "dhokla_plate", "khandvi_plate", "handvo_slice", "khakhra_snack", "sev_snack", "fafda",
+        "pav_bhaji", "vada_pav", "samosa", "pizza", "burger", "fries", "curd_bowl"
     ],
 }
+
 
 def macros_for_dish(dish_name, grams):
     recipe = DISH_RECIPES.get(dish_name, [])
     if not recipe:
         return {"carbs_g": 0.0, "protein_g": 0.0, "fat_g": 0.0, "kcal": 0.0, "gerd": 0.0}
 
-    ref_total = sum(g for _, g in recipe)
-    if ref_total <= 0:
-        ref_total = 1.0
+    ref_total = sum(g for _, g in recipe) or 1.0
     scale = float(grams) / float(ref_total)
 
     carbs = protein = fat = kcal = gerd = 0.0
     for ing, g in recipe:
-        base = ING_DB.get(ing, None)
+        base = ING_DB.get(ing)
         if not base:
             continue
         used_g = g * scale
@@ -429,32 +441,36 @@ def macros_for_dish(dish_name, grams):
         "gerd": float(np.clip(gerd, -0.3, 1.0)),
     }
 
+
 # =========================
 # 3) WELLNESS / PERFORMANCE MODELS
 # =========================
-def clamp01(x): return float(np.clip(x, 0.0, 1.0))
+def clamp01(x):
+    return float(np.clip(x, 0.0, 1.0))
+
 
 def wellness_index_generic(kcal, protein_g, sleep_h, exercise_min, stress_0_10):
-    sleep_score = clamp01(1 - abs(sleep_h - 7.5)/4.0)
-    exercise_score = clamp01(min(exercise_min, 60)/60.0)
-    stress_score = clamp01(1 - (stress_0_10/10.0))
-    protein_score = clamp01(min(protein_g, 120)/120.0)
-    kcal_score = clamp01(min(kcal, 3200)/3200.0)
+    sleep_score = clamp01(1 - abs(sleep_h - 7.5) / 4.0)
+    exercise_score = clamp01(min(exercise_min, 60) / 60.0)
+    stress_score = clamp01(1 - (stress_0_10 / 10.0))
+    protein_score = clamp01(min(protein_g, 120) / 120.0)
+    kcal_score = clamp01(min(kcal, 3200) / 3200.0)
 
     score = (
-        0.30*sleep_score +
-        0.20*exercise_score +
-        0.25*stress_score +
-        0.15*protein_score +
-        0.10*kcal_score
+        0.30 * sleep_score +
+        0.20 * exercise_score +
+        0.25 * stress_score +
+        0.15 * protein_score +
+        0.10 * kcal_score
     )
-    return round(100*score, 1)
+    return round(100 * score, 1)
+
 
 # =========================
 # 4) PLOTS
 # =========================
 def nice_line(df, x, y, title, ytitle=None):
-    if df.empty:
+    if df is None or df.empty:
         return None
     fig = px.line(df, x=x, y=y, markers=True, title=title)
     fig.update_layout(
@@ -463,26 +479,30 @@ def nice_line(df, x, y, title, ytitle=None):
         margin=dict(l=16, r=16, t=52, b=16),
         title=dict(x=0.02),
         font=dict(size=13),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
     fig.update_traces(line=dict(width=3))
     fig.update_xaxes(showgrid=True, gridcolor="rgba(255,255,255,0.08)")
     fig.update_yaxes(showgrid=True, gridcolor="rgba(255,255,255,0.08)", title=ytitle or y)
     return fig
 
+
 def nice_area_macros(df, title="Macros per day (g)"):
-    if df.empty:
+    if df is None or df.empty:
         return None
     use = df.copy()
-    use["log_date"] = pd.to_datetime(use["log_date"])
-    daily = use.groupby("log_date")[["carbs_g","protein_g","fat_g"]].sum().reset_index()
-    daily = daily.sort_values("log_date")
+    use["log_date"] = pd.to_datetime(use["log_date"], errors="coerce")
+    use = use.dropna(subset=["log_date"])
+    daily = use.groupby("log_date")[["carbs_g", "protein_g", "fat_g"]].sum().reset_index().sort_values("log_date")
 
     fig = go.Figure()
-    for col in ["protein_g","carbs_g","fat_g"]:
+    for col in ["protein_g", "carbs_g", "fat_g"]:
         fig.add_trace(go.Scatter(
-            x=daily["log_date"], y=daily[col], mode="lines", stackgroup="one",
-            name=col.replace("_g","").title(), line=dict(width=2)
+            x=daily["log_date"], y=daily[col],
+            mode="lines",
+            stackgroup="one",
+            name=col.replace("_g", "").title(),
+            line=dict(width=2),
         ))
     fig.update_layout(
         template="plotly_dark",
@@ -493,6 +513,7 @@ def nice_area_macros(df, title="Macros per day (g)"):
         yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.08)", title="grams"),
     )
     return fig
+
 
 # =========================
 # 5) UI BLOCKS
@@ -510,6 +531,7 @@ def header_block(name, subtitle, tag):
     </div>
     """, unsafe_allow_html=True)
 
+
 def meal_logger(person, enable_gerd=True, enable_t1d=False, context_key="main"):
     st.subheader("Log a meal")
 
@@ -517,13 +539,28 @@ def meal_logger(person, enable_gerd=True, enable_t1d=False, context_key="main"):
     with cols[0]:
         log_date = st.date_input("Date", value=date.today(), key=f"{person}_{context_key}_meal_date")
     with cols[1]:
-        meal_type = st.selectbox("Meal", ["Breakfast","Lunch","Dinner","Snacks"], key=f"{person}_{context_key}_meal_type")
+        meal_type = st.selectbox("Meal", ["Breakfast", "Lunch", "Dinner", "Snacks"], key=f"{person}_{context_key}_meal_type")
     with cols[2]:
-        meal_time = st.time_input("Time", value=datetime.now().time().replace(second=0, microsecond=0), key=f"{person}_{context_key}_meal_time")
+        meal_time = st.time_input(
+            "Time",
+            value=datetime.now().time().replace(second=0, microsecond=0),
+            key=f"{person}_{context_key}_meal_time",
+        )
     with cols[3]:
-        dish = st.selectbox("Dish", DISH_CATEGORIES.get(meal_type, list(DISH_RECIPES.keys())), key=f"{person}_{context_key}_dish")
+        dish = st.selectbox(
+            "Dish",
+            DISH_CATEGORIES.get(meal_type, list(DISH_RECIPES.keys())),
+            key=f"{person}_{context_key}_dish",
+        )
     with cols[4]:
-        grams = st.number_input("Weight (g)", min_value=10, max_value=2500, value=300, step=10, key=f"{person}_{context_key}_grams")
+        grams = st.number_input(
+            "Weight (g)",
+            min_value=10,
+            max_value=2500,
+            value=300,
+            step=10,
+            key=f"{person}_{context_key}_grams",
+        )
 
     st.caption("Tip: weigh the plate/bowl using a kitchen scale. If you don't know, estimate (300g bowl, 180g sandwich).")
 
@@ -534,19 +571,24 @@ def meal_logger(person, enable_gerd=True, enable_t1d=False, context_key="main"):
             override = st.checkbox("Override dish macros with my app values", key=f"{person}_{context_key}_override")
             c1, c2, c3, c4 = st.columns(4)
             with c1:
-                carbs_override = st.number_input("Carbs (g)", min_value=0.0, max_value=600.0, value=0.0, step=1.0, key=f"{person}_{context_key}_carb_ov")
+                carbs_override = st.number_input("Carbs (g)", 0.0, 600.0, 0.0, 1.0, key=f"{person}_{context_key}_carb_ov")
             with c2:
-                protein_override = st.number_input("Protein (g)", min_value=0.0, max_value=300.0, value=0.0, step=1.0, key=f"{person}_{context_key}_prot_ov")
+                protein_override = st.number_input("Protein (g)", 0.0, 300.0, 0.0, 1.0, key=f"{person}_{context_key}_prot_ov")
             with c3:
-                fat_override = st.number_input("Fat (g)", min_value=0.0, max_value=300.0, value=0.0, step=1.0, key=f"{person}_{context_key}_fat_ov")
+                fat_override = st.number_input("Fat (g)", 0.0, 300.0, 0.0, 1.0, key=f"{person}_{context_key}_fat_ov")
             with c4:
-                kcal_override = st.number_input("Calories (kcal)", min_value=0.0, max_value=4000.0, value=0.0, step=10.0, key=f"{person}_{context_key}_kcal_ov")
+                kcal_override = st.number_input("Calories (kcal)", 0.0, 4000.0, 0.0, 10.0, key=f"{person}_{context_key}_kcal_ov")
 
     notes = st.text_input("Notes (optional)", value="", key=f"{person}_{context_key}_meal_notes")
 
     if override:
-        macros = {"carbs_g": float(carbs_override), "protein_g": float(protein_override),
-                  "fat_g": float(fat_override), "kcal": float(kcal_override), "gerd": 0.0}
+        macros = {
+            "carbs_g": float(carbs_override),
+            "protein_g": float(protein_override),
+            "fat_g": float(fat_override),
+            "kcal": float(kcal_override),
+            "gerd": 0.0,
+        }
     else:
         macros = macros_for_dish(dish, grams)
 
@@ -570,7 +612,7 @@ def meal_logger(person, enable_gerd=True, enable_t1d=False, context_key="main"):
           </div>
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
     if st.button("Save meal", key=f"{person}_{context_key}_save_meal"):
@@ -582,9 +624,10 @@ def meal_logger(person, enable_gerd=True, enable_t1d=False, context_key="main"):
             dish=dish,
             grams=grams,
             macros=macros,
-            notes=notes or ""
+            notes=notes or "",
         )
         st.success("Meal saved.")
+
 
 def daily_logger(person, enable_gerd=True, enable_t1d=False, enable_period=False, context_key="main"):
     st.subheader("Daily check-in")
@@ -593,12 +636,15 @@ def daily_logger(person, enable_gerd=True, enable_t1d=False, enable_period=False
     with c[0]:
         log_date = st.date_input("Date", value=date.today(), key=f"{person}_{context_key}_daily_date")
     with c[1]:
-        weight_kg = st.number_input("Weight (kg)", min_value=25.0, max_value=200.0,
-                                    value=48.0 if person=="Sushil" else 55.0, step=0.1, key=f"{person}_{context_key}_w")
+        weight_kg = st.number_input(
+            "Weight (kg)", 25.0, 200.0,
+            value=48.0 if person == "Sushil" else 55.0,
+            step=0.1, key=f"{person}_{context_key}_w",
+        )
     with c[2]:
-        sleep_h = st.number_input("Sleep (hours)", min_value=0.0, max_value=14.0, value=7.0, step=0.5, key=f"{person}_{context_key}_sleep")
+        sleep_h = st.number_input("Sleep (hours)", 0.0, 14.0, 7.0, 0.5, key=f"{person}_{context_key}_sleep")
     with c[3]:
-        exercise_min = st.number_input("Exercise (minutes)", min_value=0.0, max_value=600.0, value=30.0, step=5.0, key=f"{person}_{context_key}_exmin")
+        exercise_min = st.number_input("Exercise (minutes)", 0.0, 600.0, 30.0, 5.0, key=f"{person}_{context_key}_exmin")
     with c[4]:
         mood = st.slider("Mood", 0, 10, 6, key=f"{person}_{context_key}_mood")
     with c[5]:
@@ -611,8 +657,9 @@ def daily_logger(person, enable_gerd=True, enable_t1d=False, enable_period=False
     period_flow = None
     period_symptoms = None
 
-    extras = st.columns([1,1,1,1])
+    extras = st.columns([1, 1, 1, 1])
     i = 0
+
     if enable_gerd:
         with extras[i]:
             gerd_symptom = st.slider("GERD symptoms", 0, 10, 3, key=f"{person}_{context_key}_gerd")
@@ -620,17 +667,17 @@ def daily_logger(person, enable_gerd=True, enable_t1d=False, enable_period=False
 
     if enable_t1d:
         with extras[i]:
-            glucose = st.number_input("Glucose (mg/dL)", min_value=20.0, max_value=600.0, value=120.0, step=1.0, key=f"{person}_{context_key}_glu")
+            glucose = st.number_input("Glucose (mg/dL)", 20.0, 600.0, 120.0, 1.0, key=f"{person}_{context_key}_glu")
         i += 1
         with extras[i]:
-            insulin_units = st.number_input("Total insulin today (units)", min_value=0.0, max_value=200.0, value=0.0, step=0.5, key=f"{person}_{context_key}_ins")
+            insulin_units = st.number_input("Total insulin today (units)", 0.0, 200.0, 0.0, 0.5, key=f"{person}_{context_key}_ins")
         i += 1
 
     if enable_period:
         with st.expander("Period tracker"):
-            p1, p2 = st.columns([1,1])
+            p1, p2 = st.columns([1, 1])
             with p1:
-                period_day = st.number_input("Cycle day (1..)", min_value=0, max_value=60, value=0, step=1, key=f"{person}_{context_key}_pday")
+                period_day = st.number_input("Cycle day (1..)", 0, 60, 0, 1, key=f"{person}_{context_key}_pday")
                 period_flow = st.selectbox("Flow", ["", "Spotting", "Light", "Medium", "Heavy"], index=0, key=f"{person}_{context_key}_pflow")
             with p2:
                 period_symptoms = st.text_area("Symptoms", value="", height=80, key=f"{person}_{context_key}_psym")
@@ -652,30 +699,48 @@ def daily_logger(person, enable_gerd=True, enable_t1d=False, enable_period=False
             period_day=period_day if enable_period else None,
             period_flow=period_flow if enable_period else None,
             period_symptoms=period_symptoms if enable_period else None,
-            extra_notes=extra_notes
+            extra_notes=extra_notes,
         )
         st.success("Daily check-in saved.")
+
 
 def goal_panel(person, goal_type, default_start, default_target, days_default, label, context_key="main"):
     st.subheader(label)
     g = get_goal(person, goal_type)
 
-    c1, c2, c3, c4 = st.columns([1,1,1,1])
+    c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
     with c1:
-        start_w = st.number_input("Start weight (kg)", min_value=25.0, max_value=200.0,
-                                  value=float(g["start_weight"]) if g else float(default_start), step=0.1, key=f"{person}_{context_key}_{goal_type}_sw")
+        start_w = st.number_input(
+            "Start weight (kg)", 25.0, 200.0,
+            value=float(g["start_weight"]) if g else float(default_start),
+            step=0.1, key=f"{person}_{context_key}_{goal_type}_sw",
+        )
     with c2:
-        target_w = st.number_input("Target weight (kg)", min_value=25.0, max_value=200.0,
-                                   value=float(g["target_weight"]) if g else float(default_target), step=0.1, key=f"{person}_{context_key}_{goal_type}_tw")
+        target_w = st.number_input(
+            "Target weight (kg)", 25.0, 200.0,
+            value=float(g["target_weight"]) if g else float(default_target),
+            step=0.1, key=f"{person}_{context_key}_{goal_type}_tw",
+        )
     with c3:
-        target_d = st.date_input("Target date", value=(date.today()+timedelta(days=days_default)) if not g else date.fromisoformat(g["target_date"]),
-                                 key=f"{person}_{context_key}_{goal_type}_td")
+        target_d = st.date_input(
+            "Target date",
+            value=(date.today() + timedelta(days=days_default)) if not g else date.fromisoformat(g["target_date"]),
+            key=f"{person}_{context_key}_{goal_type}_td",
+        )
     with c4:
-        protein_target = st.number_input("Protein target (g/day)", min_value=20.0, max_value=250.0,
-                                         value=float(g["protein_target"]) if g else 110.0, step=5.0, key=f"{person}_{context_key}_{goal_type}_pt")
+        protein_target = st.number_input(
+            "Protein target (g/day)", 20.0, 250.0,
+            value=float(g["protein_target"]) if g else 110.0,
+            step=5.0, key=f"{person}_{context_key}_{goal_type}_pt",
+        )
 
-    kcal_adjust = st.slider("Daily calorie adjustment", -800, 1200, 300 if goal_type=="gain" else -300,
-                            step=50, key=f"{person}_{context_key}_{goal_type}_kc")
+    kcal_adjust = st.slider(
+        "Daily calorie adjustment",
+        -800, 1200,
+        300 if goal_type == "gain" else -300,
+        step=50,
+        key=f"{person}_{context_key}_{goal_type}_kc",
+    )
 
     if st.button("Save goal", key=f"{person}_{context_key}_{goal_type}_save"):
         set_goal(person, goal_type, start_w, target_w, target_d.isoformat(), kcal_adjust, protein_target)
@@ -700,224 +765,164 @@ def goal_panel(person, goal_type, default_start, default_target, days_default, l
       </div>
     </div>
     """, unsafe_allow_html=True)
-def render_graphs(df, person, enable_gerd=False, enable_t1d=False, enable_period=False):
-    if df is None or len(df) == 0:
+
+
+# =========================
+# 6) DASHBOARD + GRAPHS
+# =========================
+def render_graphs(merged, logs, person, enable_gerd=False, enable_t1d=False, enable_period=False):
+    if merged is None or merged.empty:
         st.info("No history yet. Save a few days to see graphs.")
         return
 
-    dfx = df.copy()
-
-    if "log_date" not in dfx.columns:
-        st.warning("No 'log_date' column found, cannot draw graphs.")
-        return
-
+    dfx = merged.copy()
     dfx["log_date"] = pd.to_datetime(dfx["log_date"], errors="coerce")
     dfx = dfx.dropna(subset=["log_date"]).sort_values("log_date")
 
-    st.subheader("Trends & Graphs")
+    st.subheader("Trends & Progress")
 
-    # Row 1: Wellness + Weight
-    c1, c2 = st.columns(2)
-
-    if "WellnessIndex" in dfx.columns:
-        fig = px.line(dfx, x="log_date", y="WellnessIndex", markers=True,
-                      title=f"{person}: Wellness Index over time")
-        fig.update_layout(height=320, margin=dict(l=10, r=10, t=40, b=10))
-        fig.update_traces(line=dict(width=3))
-        c1.plotly_chart(fig, use_container_width=True)
-
-    if "weight_kg" in dfx.columns and dfx["weight_kg"].notna().any():
-        fig = px.line(dfx[dfx["weight_kg"].notna()], x="log_date", y="weight_kg", markers=True,
-                      title=f"{person}: Weight trend (kg)")
-        fig.update_layout(height=320, margin=dict(l=10, r=10, t=40, b=10))
-        fig.update_traces(line=dict(width=3))
-        c2.plotly_chart(fig, use_container_width=True)
-
-    # Row 2: Nutrition totals
-    macro_cols = [c for c in ["kcal", "protein_g", "carbs_g", "fat_g"] if c in dfx.columns]
-    if macro_cols:
-        st.markdown("#### Nutrition totals (per day)")
-        melt = dfx[["log_date"] + macro_cols].melt(id_vars=["log_date"], var_name="metric", value_name="value")
-        fig = px.bar(melt, x="log_date", y="value", color="metric", barmode="group", title="Daily totals")
-        fig.update_layout(height=360, margin=dict(l=10, r=10, t=40, b=10))
-        st.plotly_chart(fig, use_container_width=True)
-
-    # Row 3: Sleep / Exercise / GERD
-    cols = st.columns(3)
-
-    if "sleep_hours" in dfx.columns and dfx["sleep_hours"].notna().any():
-        fig = px.line(dfx[dfx["sleep_hours"].notna()], x="log_date", y="sleep_hours", markers=True, title="Sleep (hours)")
-        fig.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10))
-        fig.update_traces(line=dict(width=3))
-        cols[0].plotly_chart(fig, use_container_width=True)
-
-    if "exercise_min" in dfx.columns and dfx["exercise_min"].notna().any():
-        fig = px.bar(dfx[dfx["exercise_min"].notna()], x="log_date", y="exercise_min", title="Exercise (minutes/day)")
-        fig.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10))
-        cols[1].plotly_chart(fig, use_container_width=True)
-
-    if enable_gerd and "gerd_symptom" in dfx.columns and dfx["gerd_symptom"].notna().any():
-        fig = px.line(dfx[dfx["gerd_symptom"].notna()], x="log_date", y="gerd_symptom", markers=True, title="GERD symptoms (0–10)")
-        fig.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10))
-        fig.update_traces(line=dict(width=3))
-        cols[2].plotly_chart(fig, use_container_width=True)
-
-    # T1D
-    if enable_t1d:
-        st.markdown("#### Type 1 Diabetes trends")
-        tcols = st.columns(2)
-
-        if "glucose_mgdl" in dfx.columns and dfx["glucose_mgdl"].notna().any():
-            fig = px.line(dfx[dfx["glucose_mgdl"].notna()], x="log_date", y="glucose_mgdl", markers=True, title="Avg glucose (mg/dL)")
-            fig.update_layout(height=320, margin=dict(l=10, r=10, t=40, b=10))
-            fig.update_traces(line=dict(width=3))
-            tcols[0].plotly_chart(fig, use_container_width=True)
-
-        if "insulin_units" in dfx.columns and dfx["insulin_units"].notna().any():
-            fig = px.bar(dfx[dfx["insulin_units"].notna()], x="log_date", y="insulin_units", title="Total insulin (units/day)")
-            fig.update_layout(height=320, margin=dict(l=10, r=10, t=40, b=10))
-            tcols[1].plotly_chart(fig, use_container_width=True)
-
-    # Period
-    if enable_period and "period_day" in dfx.columns and dfx["period_day"].notna().any():
-        st.markdown("#### Period tracker")
-        fig = px.scatter(dfx[dfx["period_day"].notna()], x="log_date", y="period_day", title="Cycle day")
-        fig.update_layout(height=260, margin=dict(l=10, r=10, t=40, b=10))
-        st.plotly_chart(fig, use_container_width=True)
-
-    # ---- Trend charts ----
+    # Main row: wellness + macros
     gcols = st.columns([1.2, 1.0])
 
     with gcols[0]:
-        if not merged.empty and "WellnessIndex" in merged.columns:
-            fig = nice_line(
-                merged,
-                "log_date",
-                "WellnessIndex",
-                "Wellness trend",
-                ytitle="Wellness (0–100)"
-            )
+        if "WellnessIndex" in dfx.columns:
+            fig = nice_line(dfx, "log_date", "WellnessIndex", "Wellness trend", ytitle="Wellness (0–100)")
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("No data yet. Add meals + daily check-ins to see trends.")
+            st.info("No wellness score yet (add daily check-ins + meals).")
 
     with gcols[1]:
-        if not logs.empty:
+        if logs is not None and not logs.empty:
             fig2 = nice_area_macros(logs, title="Macros per day (g)")
             st.plotly_chart(fig2, use_container_width=True)
         else:
             st.info("Log meals to see macro trends.")
 
+    # Second row: weight + GERD/glucose
     pcols = st.columns([1, 1])
 
     with pcols[0]:
-        if not merged.empty and "weight_kg" in merged.columns and merged["weight_kg"].notna().any():
-            figw = nice_line(
-                merged[merged["weight_kg"].notna()],
-                "log_date",
-                "weight_kg",
-                "Weight trend",
-                ytitle="kg"
-            )
+        if "weight_kg" in dfx.columns and dfx["weight_kg"].notna().any():
+            figw = nice_line(dfx[dfx["weight_kg"].notna()], "log_date", "weight_kg", "Weight trend", ytitle="kg")
             st.plotly_chart(figw, use_container_width=True)
         else:
             st.caption("Weight plot appears after you log weight in Daily check-in.")
 
     with pcols[1]:
-        if enable_gerd and "gerd_symptom" in merged.columns and merged["gerd_symptom"].notna().any():
-            figg = nice_line(
-                merged[merged["gerd_symptom"].notna()],
-                "log_date",
-                "gerd_symptom",
-                "GERD symptoms trend",
-                ytitle="0–10"
-            )
+        if enable_gerd and "gerd_symptom" in dfx.columns and dfx["gerd_symptom"].notna().any():
+            figg = nice_line(dfx[dfx["gerd_symptom"].notna()], "log_date", "gerd_symptom", "GERD symptoms trend", ytitle="0–10")
             st.plotly_chart(figg, use_container_width=True)
-        elif enable_t1d and "glucose_mgdl" in merged.columns and merged["glucose_mgdl"].notna().any():
-            figglu = nice_line(
-                merged[merged["glucose_mgdl"].notna()],
-                "log_date",
-                "glucose_mgdl",
-                "Glucose trend",
-                ytitle="mg/dL"
-            )
+        elif enable_t1d and "glucose_mgdl" in dfx.columns and dfx["glucose_mgdl"].notna().any():
+            figglu = nice_line(dfx[dfx["glucose_mgdl"].notna()], "log_date", "glucose_mgdl", "Glucose trend", ytitle="mg/dL")
             st.plotly_chart(figglu, use_container_width=True)
         else:
-            st.caption("This panel becomes GERD or Glucose once logged.")
+            st.caption("This panel becomes GERD (Sushil) or Glucose (T1D) once logged.")
+
+    # Optional: T1D insulin
+    if enable_t1d and "insulin_units" in dfx.columns and dfx["insulin_units"].notna().any():
+        figi = px.bar(dfx[dfx["insulin_units"].notna()], x="log_date", y="insulin_units", title="Total insulin (units/day)")
+        figi.update_layout(template="plotly_dark", height=320, margin=dict(l=10, r=10, t=40, b=10))
+        st.plotly_chart(figi, use_container_width=True)
+
+    # Optional: period
+    if enable_period and "period_day" in dfx.columns and dfx["period_day"].notna().any():
+        figp = px.scatter(dfx[dfx["period_day"].notna()], x="log_date", y="period_day", title="Cycle day")
+        figp.update_layout(template="plotly_dark", height=260, margin=dict(l=10, r=10, t=40, b=10))
+        st.plotly_chart(figp, use_container_width=True)
 
 
-    with gcols[0]:
-        if not merged.empty and "WellnessIndex" in merged.columns:
-            fig = nice_line(
-                merged,
-                "log_date",
-                "WellnessIndex",
-                "Wellness trend",
-                ytitle="Wellness (0–100)"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No data yet. Add meals + daily check-ins to see trends.")
+def dashboard(person, enable_gerd=True, enable_t1d=False, enable_period=False):
+    logs = load_logs(person, days=90)
+    daily = load_daily(person, days=180)
 
-    with gcols[1]:
-        if not logs.empty:
-            fig2 = nice_area_macros(logs, title="Macros per day (g)")
-            st.plotly_chart(fig2, use_container_width=True)
-        else:
-            st.info("Log meals to see macro trends.")
+    # Build daily nutrition totals from logs
+    if not logs.empty:
+        logs2 = logs.copy()
+        logs2["log_date"] = pd.to_datetime(logs2["log_date"], errors="coerce")
+        logs2 = logs2.dropna(subset=["log_date"])
+        daily_food = logs2.groupby(logs2["log_date"].dt.date)[["kcal", "protein_g", "carbs_g", "fat_g", "gerd"]].sum().reset_index()
+        daily_food.rename(columns={"log_date": "log_date"}, inplace=True)
+        daily_food["log_date"] = daily_food["log_date"].astype(str)
+    else:
+        daily_food = pd.DataFrame(columns=["log_date", "kcal", "protein_g", "carbs_g", "fat_g", "gerd"])
 
-    pcols = st.columns([1, 1])
+    # Merge with daily check-ins
+    if not daily.empty:
+        merged = daily.merge(daily_food, how="left", on="log_date")
+        for col in ["kcal", "protein_g", "carbs_g", "fat_g", "gerd"]:
+            if col in merged.columns:
+                merged[col] = merged[col].fillna(0.0)
+    else:
+        merged = daily_food.copy()
+        if not merged.empty:
+            merged["weight_kg"] = np.nan
+            merged["sleep_hours"] = np.nan
+            merged["exercise_min"] = np.nan
+            merged["stress"] = np.nan
+            merged["mood"] = np.nan
+            merged["gerd_symptom"] = np.nan
+            merged["glucose_mgdl"] = np.nan
+            merged["insulin_units"] = np.nan
+            merged["period_day"] = np.nan
+            merged["period_flow"] = ""
+            merged["period_symptoms"] = ""
 
-    with pcols[0]:
-        if not merged.empty and "weight_kg" in merged.columns and merged["weight_kg"].notna().any():
-            figw = nice_line(
-                merged[merged["weight_kg"].notna()],
-                "log_date",
-                "weight_kg",
-                "Weight trend",
-                ytitle="kg"
-            )
-            st.plotly_chart(figw, use_container_width=True)
-        else:
-            st.caption("Weight plot appears after you log weight in Daily check-in.")
+    # Compute wellness index
+    if not merged.empty:
+        merged["WellnessIndex"] = merged.apply(
+            lambda r: wellness_index_generic(
+                kcal=float(r.get("kcal", 0.0)),
+                protein_g=float(r.get("protein_g", 0.0)),
+                sleep_h=float(r.get("sleep_hours", 7.0)) if pd.notna(r.get("sleep_hours", np.nan)) else 7.0,
+                exercise_min=float(r.get("exercise_min", 0.0)) if pd.notna(r.get("exercise_min", np.nan)) else 0.0,
+                stress_0_10=float(r.get("stress", 4.0)) if pd.notna(r.get("stress", np.nan)) else 4.0,
+            ),
+            axis=1,
+        )
 
-    with pcols[1]:
-        if enable_gerd and "gerd_symptom" in merged.columns and merged["gerd_symptom"].notna().any():
-            figg = nice_line(
-                merged[merged["gerd_symptom"].notna()],
-                "log_date",
-                "gerd_symptom",
-                "GERD symptoms trend",
-                ytitle="0–10"
-            )
-            st.plotly_chart(figg, use_container_width=True)
-        elif enable_t1d and "glucose_mgdl" in merged.columns and merged["glucose_mgdl"].notna().any():
-            figglu = nice_line(
-                merged[merged["glucose_mgdl"].notna()],
-                "log_date",
-                "glucose_mgdl",
-                "Glucose trend",
-                ytitle="mg/dL"
-            )
-            st.plotly_chart(figglu, use_container_width=True)
-        else:
-            st.caption("This panel becomes GERD or Glucose once logged.")
+    st.subheader("Dashboard")
 
+    last_wellness = float(merged["WellnessIndex"].dropna().iloc[-1]) if (not merged.empty and "WellnessIndex" in merged.columns and merged["WellnessIndex"].notna().any()) else 0.0
+    last_protein = float(merged["protein_g"].iloc[-1]) if (not merged.empty and "protein_g" in merged.columns) else 0.0
+    last_kcal = float(merged["kcal"].iloc[-1]) if (not merged.empty and "kcal" in merged.columns) else 0.0
+
+    last_weight = np.nan
+    if not merged.empty and "weight_kg" in merged.columns and merged["weight_kg"].notna().any():
+        last_weight = float(merged["weight_kg"].dropna().iloc[-1])
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.metric("Wellness (0–100)", f"{last_wellness:.1f}")
+    with c2:
+        st.metric("Calories (latest day)", f"{last_kcal:.0f}")
+    with c3:
+        st.metric("Protein (latest day)", f"{last_protein:.1f} g")
+    with c4:
+        st.metric("Weight (latest)", "—" if np.isnan(last_weight) else f"{last_weight:.1f} kg")
+
+    render_graphs(
+        merged=merged,
+        logs=logs,
+        person=person,
+        enable_gerd=enable_gerd,
+        enable_t1d=enable_t1d,
+        enable_period=enable_period,
+    )
 
     st.subheader("Recent meals")
     if logs.empty:
         st.caption("No meals logged yet.")
     else:
-        show = logs.copy()
-        show = show.sort_values(["log_date", "meal_time"], ascending=[False, False]).head(20)
+        show = logs.copy().sort_values(["log_date", "meal_time"], ascending=[False, False]).head(20)
         st.dataframe(
-            show[["log_date","meal_type","meal_time","dish","grams","kcal","protein_g","carbs_g","fat_g","notes"]],
+            show[["log_date", "meal_type", "meal_time", "dish", "grams", "kcal", "protein_g", "carbs_g", "fat_g", "notes"]],
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
         )
 
+
 # =========================
-# 6) APP UI
+# 7) APP UI
 # =========================
 st.title("Wellness Lab")
 st.caption("3 profiles · meal-by-meal logging · trend graphs · goals · DB migration included")
@@ -970,7 +975,6 @@ else:
     with tabs[3]:
         goal_panel("Stupid", "gain", default_start=48.0, default_target=54.0, days_default=30, label="Weight gain goal", context_key="goal")
     with tabs[4]:
-        # separate tab gets its own unique keys via context_key="period"
         daily_logger("Stupid", enable_gerd=False, enable_t1d=True, enable_period=True, context_key="period")
 
 st.markdown("---")
