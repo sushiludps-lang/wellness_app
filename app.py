@@ -860,10 +860,8 @@ render_graphs(
     enable_period=enable_period
 )
 
+gcols = st.columns([1.2, 1.0])
 
-
-
-    gcols = st.columns([1.2, 1.0])
 
     with gcols[0]:
         if not merged.empty and "WellnessIndex" in merged.columns:
