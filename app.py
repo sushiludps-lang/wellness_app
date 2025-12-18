@@ -859,16 +859,23 @@ render_graphs(
     enable_t1d=enable_t1d,
     enable_period=enable_period
 )
+    # ---- Trend charts ----
+    gcols = st.columns([1.2, 1.0])
 
-gcols = st.columns([1.2, 1.0])
-with gcols[0]:
+    with gcols[0]:
         if not merged.empty and "WellnessIndex" in merged.columns:
-            fig = nice_line(merged, "log_date", "WellnessIndex", "Wellness trend", ytitle="Wellness (0–100)")
+            fig = nice_line(
+                merged,
+                "log_date",
+                "WellnessIndex",
+                "Wellness trend",
+                ytitle="Wellness (0–100)"
+            )
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No data yet. Add meals + daily check-ins to see trends.")
 
-with gcols[1]:
+    with gcols[1]:
         if not logs.empty:
             fig2 = nice_area_macros(logs, title="Macros per day (g)")
             st.plotly_chart(fig2, use_container_width=True)
@@ -876,26 +883,42 @@ with gcols[1]:
             st.info("Log meals to see macro trends.")
 
     pcols = st.columns([1, 1])
+
     with pcols[0]:
         if not merged.empty and "weight_kg" in merged.columns and merged["weight_kg"].notna().any():
-            figw = nice_line(merged[merged["weight_kg"].notna()], "log_date", "weight_kg", "Weight trend", ytitle="kg")
+            figw = nice_line(
+                merged[merged["weight_kg"].notna()],
+                "log_date",
+                "weight_kg",
+                "Weight trend",
+                ytitle="kg"
+            )
             st.plotly_chart(figw, use_container_width=True)
         else:
             st.caption("Weight plot appears after you log weight in Daily check-in.")
 
     with pcols[1]:
         if enable_gerd and "gerd_symptom" in merged.columns and merged["gerd_symptom"].notna().any():
-            figg = nice_line(merged[merged["gerd_symptom"].notna()], "log_date", "gerd_symptom", "GERD symptoms trend", ytitle="0–10")
+            figg = nice_line(
+                merged[merged["gerd_symptom"].notna()],
+                "log_date",
+                "gerd_symptom",
+                "GERD symptoms trend",
+                ytitle="0–10"
+            )
             st.plotly_chart(figg, use_container_width=True)
         elif enable_t1d and "glucose_mgdl" in merged.columns and merged["glucose_mgdl"].notna().any():
-            figglu = nice_line(merged[merged["glucose_mgdl"].notna()], "log_date", "glucose_mgdl", "Glucose trend", ytitle="mg/dL")
+            figglu = nice_line(
+                merged[merged["glucose_mgdl"].notna()],
+                "log_date",
+                "glucose_mgdl",
+                "Glucose trend",
+                ytitle="mg/dL"
+            )
             st.plotly_chart(figglu, use_container_width=True)
         else:
-            st.caption("This panel becomes GERD (Sushil) or Glucose (Stupid) once logged.")
+            st.caption("This panel becomes GERD or Glucose once logged.")
 
-    if enable_period and "period_day" in merged.columns and merged["period_day"].notna().any():
-        figp = nice_line(merged[merged["period_day"].notna()], "log_date", "period_day", "Cycle day trend", ytitle="Cycle day")
-        st.plotly_chart(figp, use_container_width=True)
 
     st.subheader("Recent meals")
     if logs.empty:
