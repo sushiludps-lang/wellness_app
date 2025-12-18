@@ -878,7 +878,7 @@ def dashboard(person, enable_gerd=True, enable_t1d=False, enable_period=False):
         st.metric("Protein (latest day)", f"{last_protein:.1f} g")
     with c4:
         st.metric("Weight (latest)", "—" if np.isnan(last_weight) else f"{last_weight:.1f} kg")
-          st.markdown("---")
+              st.markdown("---")
     st.subheader("Trends & Progress")
 
     render_graphs(
@@ -888,6 +888,7 @@ def dashboard(person, enable_gerd=True, enable_t1d=False, enable_period=False):
         enable_t1d=enable_t1d,
         enable_period=enable_period
     )
+
 
     gcols = st.columns([1.2, 1.0])
 
