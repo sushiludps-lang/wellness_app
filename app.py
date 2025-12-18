@@ -861,14 +861,14 @@ render_graphs(
 )
 
 gcols = st.columns([1.2, 1.0])
-    with gcols[0]:
+with gcols[0]:
         if not merged.empty and "WellnessIndex" in merged.columns:
             fig = nice_line(merged, "log_date", "WellnessIndex", "Wellness trend", ytitle="Wellness (0–100)")
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No data yet. Add meals + daily check-ins to see trends.")
 
-    with gcols[1]:
+with gcols[1]:
         if not logs.empty:
             fig2 = nice_area_macros(logs, title="Macros per day (g)")
             st.plotly_chart(fig2, use_container_width=True)
